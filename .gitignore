@@ -1,0 +1,13 @@
+# 다운로드된 드라이버 설치 파일 (혹시 저장소 폴더에 받아진 경우)
+*.exe
+nvidia-*.exe
+
+# 런타임 데이터 / 로그 (기본은 %LOCALAPPDATA%\Nvidle 에 저장됨)
+config.json
+*.log
+
+# Windows / 에디터 부산물
+Thumbs.db
+desktop.ini
+.vs/
+*.user
