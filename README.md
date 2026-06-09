@@ -71,7 +71,9 @@ powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\Nvidle\bin\uninstall
    (`32.0.15.9649` becomes `596.49`).
 2. Maps the GPU name to NVIDIA's product IDs through the lookup endpoint, then queries the
    latest Game Ready driver.
-3. If it's newer, downloads the standalone DCH package and runs `setup.exe -s -clean -noreboot`.
+3. If it's newer, downloads the package, extracts **only the driver components** with the built-in
+   `tar` (excluding the NVIDIA App, GeForce Experience, and telemetry), and runs the trimmed
+   `setup.exe -s -clean -noreboot`.
 
 It relies on NVIDIA's public but undocumented endpoints (`gfwsl.geforce.com`,
 `nvidia.com/Download/API`). They can change without notice, which would break lookups.
@@ -156,7 +158,8 @@ powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\Nvidle\bin\uninstall
 1. WMI에서 설치된 드라이버 버전을 읽어 NVIDIA 표기로 변환합니다
    (`32.0.15.9649` → `596.49`).
 2. GPU 이름을 조회 엔드포인트로 NVIDIA 제품 ID에 매핑한 뒤, 최신 Game Ready 드라이버를 조회합니다.
-3. 더 새 버전이면 단독 DCH 패키지를 받아 `setup.exe -s -clean -noreboot`로 설치합니다.
+3. 더 새 버전이면 패키지를 받아 윈도우 내장 `tar`로 **드라이버 구성요소만 추출**
+   (NVIDIA App·GeForce Experience·텔레메트리 제외)한 뒤, 정리된 `setup.exe -s -clean -noreboot`로 설치합니다.
 
 NVIDIA의 공개되어 있지만 비공식인 엔드포인트(`gfwsl.geforce.com`, `nvidia.com/Download/API`)에
 의존합니다. 예고 없이 바뀔 수 있고, 그럴 경우 조회가 깨집니다.

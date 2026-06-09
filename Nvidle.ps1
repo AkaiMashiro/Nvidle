@@ -226,6 +226,34 @@ function Test-SafeToInstall([int]$idleMin) {
     return @{ Safe = $true; Reason = ("유휴 확인(무입력 {0:N0}초)" -f $idleSec) }
 }
 
+# 설치 파일을 '드라이버만' 추출 — NVIDIA App/GeForce Experience/텔레메트리 컴포넌트 제외.
+# 윈도우 내장 tar.exe 사용(외부 의존성/미서명 실행 없음). setup.cfg의 NvApp 파일참조 3줄을 제거해
+# 무인설치가 깨지지 않게 함. 추출된 폴더 경로를 반환.
+function Expand-DriverOnly([string]$installerExe) {
+    if (-not (Get-Command tar.exe -ErrorAction SilentlyContinue)) {
+        throw 'tar.exe 가 없습니다(Windows 10 1803+ / 11 내장). 드라이버-only 추출 불가.'
+    }
+    $ex = Join-Path $env:TEMP 'nvidle-pkg'
+    if (Test-Path $ex) { Remove-Item $ex -Recurse -Force -ErrorAction SilentlyContinue }
+    New-Item -ItemType Directory -Path $ex -Force | Out-Null
+    # App/GFE/텔레메트리 제외하고 추출. SFX의 PE 헤더 때문에 tar가 종료코드 255를 내지만
+    # 7z 페이로드는 정상 추출되므로, 종료코드 대신 파일 존재로 성공을 판정한다.
+    $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    tar.exe -xf $installerExe -C $ex --exclude=NvApp* --exclude=NvBackend* --exclude=NvTelemetry* --exclude=ShadowPlay* --exclude=FrameViewSDK* 2>$null
+    $ErrorActionPreference = $old
+    if (-not (Test-Path (Join-Path $ex 'setup.exe')) -or -not (Test-Path (Join-Path $ex 'Display.Driver'))) {
+        Remove-Item $ex -Recurse -Force -ErrorAction SilentlyContinue
+        throw '드라이버 패키지 추출 실패(setup.exe/Display.Driver 없음).'
+    }
+    # setup.cfg manifest 에서 NvApp 폴더 파일참조 3줄 제거(없으면 무인설치 실패).
+    # 다국어 문자열/인코딩 보존을 위해 UTF-8(BOM 없이) 그대로 읽고 쓴다. string 정의는 건드리지 않음.
+    $cfg = Join-Path $ex 'setup.cfg'
+    $t = [IO.File]::ReadAllText($cfg, [Text.Encoding]::UTF8)
+    $t = $t -replace '(?m)^[ \t]*<file name="\$\{\{(EulaHtmlFile|FunctionalConsentFile|PrivacyPolicyFile)\}\}"\s*/>\r?\n', ''
+    [IO.File]::WriteAllText($cfg, $t, (New-Object Text.UTF8Encoding $false))
+    return $ex
+}
+
 function Install-Driver($driver, $cfg, [switch]$Guided, [switch]$IdleGated, [int]$idleMin = 10) {
     $dest = Join-Path $env:TEMP ("nvidia-$($driver.Text).exe")
     Step "다운로드 중: $($driver.Text)  (수백 MB, 잠시 걸립니다)"
@@ -244,19 +272,24 @@ function Install-Driver($driver, $cfg, [switch]$Guided, [switch]$IdleGated, [int
         Step "설치 프로그램 실행 — 'NVIDIA 그래픽 드라이버'만 선택해 진행하세요."
         $p = Start-Process -FilePath $dest -Wait -PassThru
     } else {
-        # 다운로드 사이 사용자가 돌아왔을 수 있으니 설치 직전 유휴 재확인(자동 모드)
+        # 드라이버-only 추출 (NVIDIA App/GFE/텔레메트리 제외)
+        Step '드라이버-only 추출 중 (NVIDIA App 제외)...'
+        $pkg = Expand-DriverOnly $dest
+        Ok '추출 완료 — NVIDIA App 제외됨'
+        # 설치(화면 리셋) 직전 유휴 재확인(자동 모드): 사용 재개 시 취소하고 다음 기회에
         if ($IdleGated) {
             $safe = Test-SafeToInstall $idleMin
             if (-not $safe.Safe) {
-                Remove-Item $dest -Force -ErrorAction SilentlyContinue
-                Note "다운로드 후 사용 재개 감지 — $($safe.Reason). 설치 취소(다음에 PC 켤 때 재시도)."
+                Remove-Item $dest, $pkg -Recurse -Force -ErrorAction SilentlyContinue
+                Note "사용 재개 감지 — $($safe.Reason). 설치 취소(다음에 PC 켤 때 재시도)."
                 return -1
             }
         }
         $flags = @('-s', '-noreboot')
         if (-not $KeepSettings -and $cfg.cleanInstall) { $flags += '-clean' }
-        Step "무인 설치 중... (화면이 잠시 깜빡일 수 있음)  옵션: $($flags -join ' ')"
-        $p = Start-Process -FilePath $dest -ArgumentList $flags -Wait -PassThru
+        Step "무인 설치 중 (드라이버만)... 화면이 잠시 깜빡일 수 있음  옵션: $($flags -join ' ')"
+        $p = Start-Process -FilePath (Join-Path $pkg 'setup.exe') -ArgumentList $flags -Wait -PassThru
+        Remove-Item $pkg -Recurse -Force -ErrorAction SilentlyContinue
     }
     $code = $p.ExitCode
     Remove-Item $dest -Force -ErrorAction SilentlyContinue
