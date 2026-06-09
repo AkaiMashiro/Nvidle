@@ -6,7 +6,7 @@
   PC 켤 때(로그온) 확인 + 유휴 시 설치하는 자동 업데이트를 등록한 뒤, 1회 점검합니다.
 
   로컬:  powershell -ExecutionPolicy Bypass -File .\install.ps1
-  웹  :  irm https://raw.githubusercontent.com/AkaiMashiro/Nvidle/main/install.ps1 | iex
+  웹  :  $f = "$env:TEMP\nvidle-install.ps1"; irm https://raw.githubusercontent.com/AkaiMashiro/Nvidle/main/install.ps1 -OutFile $f; powershell -NoProfile -ExecutionPolicy Bypass -File $f
 #>
 [CmdletBinding()]
 param(
@@ -39,8 +39,9 @@ if (-not (Test-Admin) -and -not $Elevated) {
     if ($selfPath) {
         Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$selfPath`" $opt"
     } else {
-        # 웹(irm|iex) 모드: 같은 한 줄 명령을 관리자 권한으로 다시 실행
-        Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"irm $RepoRaw/install.ps1 | iex`""
+        # 웹 모드(파일 없이 실행): BOM 보존 위해 임시파일로 받아 관리자 권한으로 실행
+        $tmp = Join-Path $env:TEMP 'nvidle-install.ps1'
+        Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"irm $RepoRaw/install.ps1 -OutFile '$tmp'; & '$tmp'`""
     }
     return
 }
@@ -50,18 +51,21 @@ Write-Host '==================================================' -ForegroundColor
 Write-Host '  Nvidle 설치 (NVIDIA 드라이버 업데이터)' -ForegroundColor White
 Write-Host '==================================================' -ForegroundColor DarkCyan
 
-# 1) 엔진 확보(로컬 사본 우선, 없으면 다운로드)
+# 1) 엔진 확보 — 로컬 클론(엔진+제거스크립트가 한 폴더에 같이 있음)이면 로컬 사본,
+#    아니면(웹 설치: 임시폴더에 install.ps1 만 받아짐) 깃허브에서 다운로드.
+#    이렇게 하면 대소문자 무시(nvidle.ps1==Nvidle.ps1)로 임시 install.ps1 을 엔진으로 오인하지 않음.
 New-Item -ItemType Directory -Path $BinDir -Force | Out-Null
-$localEngine = if ($selfDir) { Join-Path $selfDir 'Nvidle.ps1' } else { '' }
-if ($localEngine -and (Test-Path $localEngine)) {
+$localEngine = if ($selfDir) { Join-Path $selfDir 'Nvidle.ps1' }   else { '' }
+$localUninst = if ($selfDir) { Join-Path $selfDir 'uninstall.ps1' } else { '' }
+$useLocal = $localEngine -and (Test-Path $localEngine) -and $localUninst -and (Test-Path $localUninst)
+if ($useLocal) {
     Copy-Item $localEngine $Engine -Force
-    $u = Join-Path $selfDir 'uninstall.ps1'
-    if (Test-Path $u) { Copy-Item $u (Join-Path $BinDir 'uninstall.ps1') -Force }
-    Write-Host ">> 엔진 설치: $Engine" -ForegroundColor Cyan
+    Copy-Item $localUninst (Join-Path $BinDir 'uninstall.ps1') -Force
+    Write-Host ">> 엔진 설치(로컬 사본): $Engine" -ForegroundColor Cyan
 } else {
     Write-Host ">> 엔진 다운로드: $RepoRaw" -ForegroundColor Cyan
     Invoke-WebRequest "$RepoRaw/Nvidle.ps1" -OutFile $Engine -UseBasicParsing
-    try { Invoke-WebRequest "$RepoRaw/uninstall.ps1" -OutFile (Join-Path $BinDir 'uninstall.ps1') -UseBasicParsing } catch {}
+    Invoke-WebRequest "$RepoRaw/uninstall.ps1" -OutFile (Join-Path $BinDir 'uninstall.ps1') -UseBasicParsing
 }
 
 # 2) 자동 업데이트(유휴 게이트) 등록 — 이미 관리자이므로 추가 UAC 없음
@@ -77,7 +81,7 @@ $uninst = Join-Path $BinDir 'uninstall.ps1'
 Write-Host ''
 Write-Host '[OK] 설치 완료!' -ForegroundColor Green
 Write-Host "  - 도구 위치   : $BinDir"
-Write-Host "  - 자동 업데이트: PC 켤 때(로그온) 점검, 유휴(무입력 $IdleMinutes분+)일 때 설치"
+Write-Host "  - 자동 업데이트: PC 켤 때(로그온) 점검, 유휴(무입력 ${IdleMinutes}분+)일 때 설치"
 Write-Host "  - 상태 보기   : powershell -ExecutionPolicy Bypass -File `"$Engine`" -Status"
 Write-Host "  - 제거        : powershell -ExecutionPolicy Bypass -File `"$uninst`""
 Write-Host ''

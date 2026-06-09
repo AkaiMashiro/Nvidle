@@ -7,7 +7,7 @@
   ※ 이미 설치된 그래픽 드라이버 자체는 건드리지 않습니다.
 
   로컬:  powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
-  웹  :  irm https://raw.githubusercontent.com/AkaiMashiro/Nvidle/main/uninstall.ps1 | iex
+  웹  :  $f = "$env:TEMP\nvidle-uninstall.ps1"; irm https://raw.githubusercontent.com/AkaiMashiro/Nvidle/main/uninstall.ps1 -OutFile $f; powershell -NoProfile -ExecutionPolicy Bypass -File $f
 #>
 [CmdletBinding()]
 param([switch]$Elevated, [switch]$Relaunched)
@@ -34,9 +34,10 @@ if (-not (Test-Admin) -and -not $Elevated) {
         Write-Host '>> 관리자 권한으로 다시 실행합니다... (UAC 창에서 예)' -ForegroundColor Cyan
         Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$launch`" -Elevated -Relaunched"
     } else {
-        # 웹(irm|iex) 모드: 같은 한 줄 명령을 관리자 권한으로 다시 실행
+        # 웹 모드(파일 없이 실행): BOM 보존 위해 임시파일로 받아 관리자 권한으로 실행
         Write-Host '>> 관리자 권한으로 다시 실행합니다... (UAC 창에서 예)' -ForegroundColor Cyan
-        Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"irm https://raw.githubusercontent.com/AkaiMashiro/Nvidle/main/uninstall.ps1 | iex`""
+        $tmp = Join-Path $env:TEMP 'nvidle-uninstall.ps1'
+        Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"irm https://raw.githubusercontent.com/AkaiMashiro/Nvidle/main/uninstall.ps1 -OutFile '$tmp'; & '$tmp'`""
     }
     return
 }

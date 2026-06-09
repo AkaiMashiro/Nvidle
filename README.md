@@ -14,7 +14,7 @@ Windows 10/11, PowerShell 5.1+. No dependencies.
 ### Install
 
 ```powershell
-irm https://raw.githubusercontent.com/AkaiMashiro/Nvidle/main/install.ps1 | iex
+$f = "$env:TEMP\nvidle-install.ps1"; irm https://raw.githubusercontent.com/AkaiMashiro/Nvidle/main/install.ps1 -OutFile $f; powershell -NoProfile -ExecutionPolicy Bypass -File $f
 ```
 
 It downloads the script to `%LOCALAPPDATA%\Nvidle`, registers an idle-aware auto-update task,
@@ -100,7 +100,7 @@ Windows 10/11, PowerShell 5.1+. 의존성 없음.
 ### 설치
 
 ```powershell
-irm https://raw.githubusercontent.com/AkaiMashiro/Nvidle/main/install.ps1 | iex
+$f = "$env:TEMP\nvidle-install.ps1"; irm https://raw.githubusercontent.com/AkaiMashiro/Nvidle/main/install.ps1 -OutFile $f; powershell -NoProfile -ExecutionPolicy Bypass -File $f
 ```
 
 스크립트를 `%LOCALAPPDATA%\Nvidle`에 내려받고, 유휴 기반 자동 업데이트 작업을 등록한 뒤
